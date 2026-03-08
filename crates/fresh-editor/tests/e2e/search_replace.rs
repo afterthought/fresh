@@ -335,7 +335,7 @@ fn test_search_replace_escape_always_closes() {
         .unwrap();
 }
 
-/// Execute replacement — files should be modified on disk via Ctrl+Enter.
+/// Execute replacement — files should be modified on disk via Alt+Enter.
 #[test]
 fn test_search_replace_executes_replacement() {
     let (_temp_dir, project_root) = setup_search_replace_project();
@@ -359,9 +359,9 @@ fn test_search_replace_executes_replacement() {
         .wait_until(|h| h.screen_to_string().contains("[v]"))
         .unwrap();
 
-    // Press Ctrl+Enter to execute Replace All
+    // Press Alt+Enter to execute Replace All
     harness
-        .send_key(KeyCode::Enter, KeyModifiers::CONTROL)
+        .send_key(KeyCode::Enter, KeyModifiers::ALT)
         .unwrap();
 
     // Wait for the status message confirming replacement
@@ -429,9 +429,9 @@ fn test_search_replace_delete_pattern() {
         .wait_until(|h| h.screen_to_string().contains("[v]"))
         .unwrap();
 
-    // Ctrl+Enter to execute Replace All
+    // Alt+Enter to execute Replace All
     harness
-        .send_key(KeyCode::Enter, KeyModifiers::CONTROL)
+        .send_key(KeyCode::Enter, KeyModifiers::ALT)
         .unwrap();
 
     harness
@@ -472,9 +472,9 @@ fn test_search_replace_multiple_matches_same_line() {
         .wait_until(|h| h.screen_to_string().contains("[v]"))
         .unwrap();
 
-    // Ctrl+Enter to execute Replace All
+    // Alt+Enter to execute Replace All
     harness
-        .send_key(KeyCode::Enter, KeyModifiers::CONTROL)
+        .send_key(KeyCode::Enter, KeyModifiers::ALT)
         .unwrap();
 
     harness
