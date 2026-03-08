@@ -360,9 +360,7 @@ fn test_search_replace_executes_replacement() {
         .unwrap();
 
     // Press Alt+Enter to execute Replace All
-    harness
-        .send_key(KeyCode::Enter, KeyModifiers::ALT)
-        .unwrap();
+    harness.send_key(KeyCode::Enter, KeyModifiers::ALT).unwrap();
 
     // Wait for the status message confirming replacement
     harness
@@ -430,9 +428,7 @@ fn test_search_replace_delete_pattern() {
         .unwrap();
 
     // Alt+Enter to execute Replace All
-    harness
-        .send_key(KeyCode::Enter, KeyModifiers::ALT)
-        .unwrap();
+    harness.send_key(KeyCode::Enter, KeyModifiers::ALT).unwrap();
 
     harness
         .wait_until(|h| h.screen_to_string().contains("Replaced"))
@@ -473,9 +469,7 @@ fn test_search_replace_multiple_matches_same_line() {
         .unwrap();
 
     // Alt+Enter to execute Replace All
-    harness
-        .send_key(KeyCode::Enter, KeyModifiers::ALT)
-        .unwrap();
+    harness.send_key(KeyCode::Enter, KeyModifiers::ALT).unwrap();
 
     harness
         .wait_until(|h| h.screen_to_string().contains("Replaced"))
