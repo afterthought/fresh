@@ -649,7 +649,7 @@ macro_rules! define_action_str_mapping {
         $args_name:ident;
         simple { $($s_name:literal => $s_variant:ident),* $(,)? }
         with_char { $($c_name:literal => $c_variant:ident),* $(,)? }
-        custom { $($x_name:literal => $x_body:expr),* $(,)? }
+        custom { $($x_name:literal => $x_variant:ident : $x_body:expr),* $(,)? }
     ) => {
         /// Parse action from string (used when loading from config)
         pub fn from_str(s: &str, $args_name: &HashMap<String, serde_json::Value>) -> Option<Self> {
@@ -659,6 +659,17 @@ macro_rules! define_action_str_mapping {
                 $($x_name => $x_body,)*
                 _ => return None,
             })
+        }
+
+        /// Convert an action back to its string name (inverse of from_str).
+        /// Returns the canonical action name string.
+        pub fn to_action_str(&self) -> String {
+            match self {
+                $(Self::$s_variant => $s_name.to_string(),)*
+                $(Self::$c_variant(_) => $c_name.to_string(),)*
+                $(Self::$x_variant(_) => $x_name.to_string(),)*
+                Self::PluginAction(name) => name.clone(),
+            }
         }
 
         /// All valid action name strings, sorted alphabetically.
@@ -774,6 +785,8 @@ impl Action {
             "revert" => Revert,
             "toggle_auto_revert" => ToggleAutoRevert,
             "format_buffer" => FormatBuffer,
+            "trim_trailing_whitespace" => TrimTrailingWhitespace,
+            "ensure_final_newline" => EnsureFinalNewline,
             "goto_line" => GotoLine,
             "scan_line_index" => ScanLineIndex,
             "goto_matching_bracket" => GoToMatchingBracket,
@@ -822,6 +835,10 @@ impl Action {
 
             "next_buffer" => NextBuffer,
             "prev_buffer" => PrevBuffer,
+            "switch_to_previous_tab" => SwitchToPreviousTab,
+            "switch_to_tab_by_name" => SwitchToTabByName,
+            "scroll_tabs_left" => ScrollTabsLeft,
+            "scroll_tabs_right" => ScrollTabsRight,
 
             "navigate_back" => NavigateBack,
             "navigate_forward" => NavigateForward,
@@ -876,6 +893,7 @@ impl Action {
             "toggle_file_explorer" => ToggleFileExplorer,
             "toggle_menu_bar" => ToggleMenuBar,
             "toggle_tab_bar" => ToggleTabBar,
+            "toggle_status_bar" => ToggleStatusBar,
             "toggle_vertical_scrollbar" => ToggleVerticalScrollbar,
             "toggle_horizontal_scrollbar" => ToggleHorizontalScrollbar,
             "focus_file_explorer" => FocusFileExplorer,
@@ -919,16 +937,20 @@ impl Action {
             "inspect_theme_at_cursor" => InspectThemeAtCursor,
             "select_theme" => SelectTheme,
             "select_keybinding_map" => SelectKeybindingMap,
+            "select_cursor_style" => SelectCursorStyle,
             "select_locale" => SelectLocale,
 
             "set_tab_size" => SetTabSize,
             "set_line_ending" => SetLineEnding,
             "set_encoding" => SetEncoding,
             "reload_with_encoding" => ReloadWithEncoding,
+            "set_language" => SetLanguage,
             "toggle_indentation_style" => ToggleIndentationStyle,
             "toggle_tab_indicators" => ToggleTabIndicators,
             "toggle_whitespace_indicators" => ToggleWhitespaceIndicators,
             "reset_buffer_settings" => ResetBufferSettings,
+            "add_ruler" => AddRuler,
+            "remove_ruler" => RemoveRuler,
 
             "dump_config" => DumpConfig,
 
@@ -991,18 +1013,22 @@ impl Action {
             "show_macro" => ShowMacro,
         }
         custom {
-            "copy_with_theme" => {
+            "copy_with_theme" => CopyWithTheme : {
                 // Empty theme = open theme picker prompt
                 let theme = args.get("theme").and_then(|v| v.as_str()).unwrap_or("");
                 Self::CopyWithTheme(theme.to_string())
             },
-            "menu_open" => {
+            "menu_open" => MenuOpen : {
                 let name = args.get("name")?.as_str()?;
                 Self::MenuOpen(name.to_string())
             },
-            "switch_keybinding_map" => {
+            "switch_keybinding_map" => SwitchKeybindingMap : {
                 let map_name = args.get("map")?.as_str()?;
                 Self::SwitchKeybindingMap(map_name.to_string())
+            },
+            "prompt_confirm_with_text" => PromptConfirmWithText : {
+                let text = args.get("text")?.as_str()?;
+                Self::PromptConfirmWithText(text.to_string())
             },
         }
     }
@@ -1133,6 +1159,9 @@ pub struct KeybindingResolver {
 
     /// Default chord bindings for each context
     default_chord_bindings: HashMap<KeyContext, HashMap<Vec<(KeyCode, KeyModifiers)>, Action>>,
+
+    /// Plugin default chord bindings (for mode chord bindings from defineMode)
+    plugin_chord_defaults: HashMap<KeyContext, HashMap<Vec<(KeyCode, KeyModifiers)>, Action>>,
 }
 
 impl KeybindingResolver {
@@ -1144,6 +1173,7 @@ impl KeybindingResolver {
             plugin_defaults: HashMap::new(),
             chord_bindings: HashMap::new(),
             default_chord_bindings: HashMap::new(),
+            plugin_chord_defaults: HashMap::new(),
         };
 
         // Load bindings from the active keymap (with inheritance resolution) into default_bindings
@@ -1306,10 +1336,24 @@ impl KeybindingResolver {
             .insert((key_code, modifiers), action);
     }
 
-    /// Clear all plugin default bindings for a specific mode
+    /// Load a plugin default chord binding (for mode chord bindings from defineMode)
+    pub fn load_plugin_chord_default(
+        &mut self,
+        context: KeyContext,
+        sequence: Vec<(KeyCode, KeyModifiers)>,
+        action: Action,
+    ) {
+        self.plugin_chord_defaults
+            .entry(context)
+            .or_default()
+            .insert(sequence, action);
+    }
+
+    /// Clear all plugin default bindings (single-key and chord) for a specific mode
     pub fn clear_plugin_defaults_for_mode(&mut self, mode_name: &str) {
         let context = KeyContext::Mode(mode_name.to_string());
         self.plugin_defaults.remove(&context);
+        self.plugin_chord_defaults.remove(&context);
     }
 
     /// Get all plugin default bindings (for keybinding editor display)
@@ -1407,6 +1451,11 @@ impl KeybindingResolver {
             ),
             (&self.chord_bindings, &context, "custom context"),
             (&self.default_chord_bindings, &context, "default context"),
+            (
+                &self.plugin_chord_defaults,
+                &context,
+                "plugin default context",
+            ),
         ];
 
         let mut has_partial_match = false;
