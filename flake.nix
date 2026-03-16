@@ -72,8 +72,6 @@
               ./crates/fresh-editor/tests
               # Documentation
               ./docs
-              # Markdown files in root (plan.md, PLAN.md, README.md, etc.)
-              (lib.fileset.fileFilter (file: file.hasExt "md") unfilteredRoot)
             ];
           };
 
